@@ -1,8 +1,8 @@
 [
   {
     "kernelSource": {
-      "name": "picasso_user_defconfig",
-      "repo": "https://github.com/EndCredits/android_kernel_xiaomi_sm7250",
+      "name": "picasso",
+      "repo": "https://github.com/crdroidandroid/android_kernel_xiaomi_sm7250",
       "branch": "13.0",
       "device": "picasso",
       "defconfig": "vendor/picasso_user_defconfig"
@@ -29,7 +29,7 @@
       "use": true,
       "release": true
     },
-    "enableKernelSU": false,
+    "enableKernelSU": true,
     "enableLXC": true
   }
 ]
