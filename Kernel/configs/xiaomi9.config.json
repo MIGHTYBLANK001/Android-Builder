@@ -1,11 +1,11 @@
 [
   {
     "kernelSource": {
-      "name": "Xiaomi9KernelPoweredBySeparate",
-      "repo": "https://github.com/Separatee/AllinOneKernel",
-      "branch": "main",
-      "device": "cepheus",
-      "defconfig": "cepheus_defconfig"
+      "name": "picasso_user_defconfig",
+      "repo": "https://github.com/Jimmun/kernel_xiaomi_picasso",
+      "branch": "13.0",
+      "device": "picasso",
+      "defconfig": "vendor/picasso_user_defconfig"
     },
     "toolchains": [
       {
@@ -26,10 +26,10 @@
       }
     },
     "AnyKernel3": {
-      "use": false,
+      "use": ture,
       "release": true
     },
     "enableKernelSU": false,
-    "enableLXC": false
+    "enableLXC": true
   }
 ]
