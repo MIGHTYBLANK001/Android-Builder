@@ -2,8 +2,8 @@
   {
     "kernelSource": {
       "name": "picasso_user_defconfig",
-      "repo": "https://github.com/Jimmun/kernel_xiaomi_picasso",
-      "branch": "13.0",
+      "repo": "https://github.com/MIGHTYBLANK001/Xiaomi_Kernel_OpenSource_picasso",
+      "branch": "android-4.19",
       "device": "picasso",
       "defconfig": "vendor/picasso_user_defconfig"
     },
