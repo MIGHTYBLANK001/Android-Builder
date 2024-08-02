@@ -1,11 +1,11 @@
 [
   {
     "kernelSource": {
-      "name": "lmi-crd",
-      "repo": "https://github.com/crdroidandroid/android_kernel_xiaomi_sm8250",
-      "branch": "14.0-lmi",
-      "device": "lmi",
-      "defconfig": "lmi_defconfig"
+      "name": "sakura-lineage20",
+      "repo": "https://github.com/MIGHTYBLANK001/Sakura-android_kernel_xiaomi_msm8953",
+      "branch": "lineage-20",
+      "device": "sakura",
+      "defconfig": "sakura_defconfig"
     },
     "toolchains": [
       {
