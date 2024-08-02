@@ -1,9 +1,9 @@
 [
   {
     "kernelSource": {
-      "name": "lmi",
-      "repo": "https://github.com/MIGHTYBLANK001/lmi_kernel_xiaomi_sm8250",
-      "branch": "aosp-14",
+      "name": "lmi-crd",
+      "repo": "https://github.com/crdroidandroid/android_kernel_xiaomi_sm8250",
+      "branch": "14.0-lmi",
       "device": "lmi",
       "defconfig": "lmi_defconfig"
     },
