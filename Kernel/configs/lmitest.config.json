@@ -2,8 +2,8 @@
   {
     "kernelSource": {
       "name": "lmi",
-      "repo": "https://github.com/Kscope-Devices/android_kernel_xiaomi_lmi",
-      "branch": "sunflowerleaf",
+      "repo": "https://github.com/ProjectElixir-Devices/kernel_xiaomi_lmi",
+      "branch": "Kitsune",
       "device": "lmi",
       "defconfig": "lmi_defconfig"
     },
