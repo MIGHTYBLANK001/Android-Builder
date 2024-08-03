@@ -2,8 +2,8 @@
   {
     "kernelSource": {
       "name": "lmi",
-      "repo": "https://github.com/Rohail33/Realking_kernel_sm8250",
-      "branch": "main",
+      "repo": "https://github.com/Kscope-Devices/android_kernel_xiaomi_lmi",
+      "branch": "sunflowerleaf",
       "device": "lmi",
       "defconfig": "lmi_defconfig"
     },
