@@ -2,10 +2,10 @@
   {
     "kernelSource": {
       "name": "lmi",
-      "repo": "https://github.com/projects-nexus/nexus_kernel_xiaomi_sm8250",
-      "branch": "stable",
+      "repo": "https://github.com/AOSPA/android_kernel_xiaomi_sm8250",
+      "branch": "uvite",
       "device": "lmi",
-      "defconfig": "lmi_defconfig"
+      "defconfig": "vendor/lmi_defconfig"
     },
     "toolchains": [
       {
