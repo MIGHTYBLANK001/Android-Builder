@@ -2,8 +2,8 @@
   {
     "kernelSource": {
       "name": "lmi",
-      "repo": "https://github.com/ProjectElixir-Devices/kernel_xiaomi_lmi",
-      "branch": "Kitsune",
+      "repo": "https://github.com/projects-nexus/nexus_kernel_xiaomi_sm8250",
+      "branch": "stable",
       "device": "lmi",
       "defconfig": "lmi_defconfig"
     },
