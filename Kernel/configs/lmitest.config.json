@@ -2,10 +2,10 @@
   {
     "kernelSource": {
       "name": "lmi",
-      "repo": "https://github.com/AOSPA/android_kernel_xiaomi_sm8250",
-      "branch": "uvite",
+      "repo": "https://github.com/liyafe1997/kernel_xiaomi_sm8250_mod",
+      "branch": "android15-lineage22-mod",
       "device": "lmi",
-      "defconfig": "vendor/lmi_defconfig"
+      "defconfig": "lmi_defconfig"
     },
     "toolchains": [
       {
