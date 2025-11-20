@@ -93,33 +93,33 @@ jobs:
       - name: 😄 Checkout
         uses: actions/checkout@v5   # ⬆️ 升级到 v5
 
-# Install prerequisites
-- name: ⭐ Install prerequisites
-  run: |
-    sudo apt-get update
+      # Install prerequisites
+      - name: ⭐ Install prerequisites
+        run: |
+          sudo apt-get update
 
-    # Python: 24.04 不再提供 python2/python2-dev，统一用 python3。
-    # 如果脚本调用 `python`，安装 python-is-python3 让 python 指向 python3。
-    sudo apt-get install -y python3 python-is-python3
+          # Python: 24.04 不再提供 python2/python2-dev，统一用 python3。
+          # 如果脚本调用 `python`，安装 python-is-python3 让 python 指向 python3。
+          sudo apt-get install -y python3 python-is-python3
 
-    # 基础工具、打包与镜像常用依赖
-    sudo apt-get install -y \
-      curl git ftp lftp wget libarchive-tools ccache \
-      pngcrush schedtool dpkg-dev liblz4-tool make optipng maven device-tree-compiler \
-      libc6-dev-i386 lib32ncurses-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc \
-      libxml2-utils libbz2-dev libbz2-1.0 squashfs-tools lzop flex tree \
-      build-essential bc gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi libssl-dev libfl-dev \
-      pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl \
-      zip unzip tar gzip bzip2 rar unrar llvm g++-multilib bison gperf zlib1g-dev automake
+          # 基础工具、打包与镜像常用依赖
+          sudo apt-get install -y \
+            curl git ftp lftp wget libarchive-tools ccache \
+            pngcrush schedtool dpkg-dev liblz4-tool make optipng maven device-tree-compiler \
+            libc6-dev-i386 lib32ncurses-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc \
+            libxml2-utils libbz2-dev libbz2-1.0 squashfs-tools lzop flex tree \
+            build-essential bc gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi libssl-dev libfl-dev \
+            pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl \
+            zip unzip tar gzip bzip2 rar unrar llvm g++-multilib bison gperf zlib1g-dev automake
 
-    # 可选：7z/7zip 支持
-    # sudo apt-get install -y p7zip-full p7zip-rar
+          # 可选：7z/7zip 支持
+          # sudo apt-get install -y p7zip-full p7zip-rar
 
-    # 验证关键工具是否可用
-    python --version
-    python3 --version
-    mvn -v
-    gcc -v
+          # 验证关键工具是否可用
+          python --version
+          python3 --version
+          mvn -v
+          gcc -v
 
 
       # Setup ccache
