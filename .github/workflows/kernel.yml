@@ -114,9 +114,6 @@ jobs:
         run: |
           git clone --recursive --depth=1 -j $(nproc) --branch ${{ env.KERNEL_BRANCH }} ${{ env.KERNEL_REPO }} ${{ env.KERNEL_NAME }}
 
-      - name: Remove BOM from dtsi file
-        run: |
-          sed -i '1s/^\xEF\xBB\xBF//' /home/runner/work/Android-Builder/Android-Builder/miatoll/arch/arm64/boot/dts/qcom/cust-atoll.dtsi
 
       - name: 💫 Get toolchains
         env:
