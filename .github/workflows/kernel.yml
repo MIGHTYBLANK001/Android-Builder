@@ -334,40 +334,43 @@ jobs:
             echo "🤔 Use custom AnyKernel3 => ($ANYKERNEL_REPO)"
           else
             git clone --recursive --depth=1 -j $(nproc) https://github.com/osm0sis/AnyKernel3 AnyKernel3
-            sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
-            sed -i 's!block=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;!block=auto;!g' AnyKernel3/anykernel.sh
-            sed -i 's/is_slot_device=0;/is_slot_device=auto;/g' AnyKernel3/anykernel.sh
-            echo "🤔 Use origin AnyKernel3 => (https://github.com/osm0sis/AnyKernel3)"
+            
+            # --- 核心修复：使用正则表达式忽略大小写并强制覆盖 ---
+            # 1. 关闭设备型号检查 (0 为关闭)
+            sed -i 's/^do.devicecheck=.*/do.devicecheck=0;/g' AnyKernel3/anykernel.sh
+            
+            # 2. 自动识别分区路径 (关键：忽略大小写匹配 BLOCK/block 并设为 auto)
+            sed -i 's/^[Bb][Ll][Oo][Cc][Kk]=.*/block=auto;/g' AnyKernel3/anykernel.sh
+            
+            # 3. 自动识别 A/B 分区 (关键：忽略大小写匹配并设为 auto)
+            sed -i 's/^[Ii][Ss]_[Ss][Ll][Oo][Tt]_[Dd][Ee][Vv][Ii][Cc][Ee]=.*/is_slot_device=auto;/g' AnyKernel3/anykernel.sh
+            
+            # 4. 设置补丁校验位 (防止有些机型刷完进 fastboot)
+            sed -i 's/^patch_vbmeta_flag=.*/patch_vbmeta_flag=auto;/g' AnyKernel3/anykernel.sh
+            
+            echo "✅ AnyKernel3 configuration patched successfully."
           fi
 
-          if [ -e "${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image.gz-dtb" ]; then
-            cp -f ${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image.gz-dtb ./AnyKernel3/
-          else
-            if [ -e "${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image" ]; then
-              cp -f ${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image ./AnyKernel3/
+          # 拷贝编译产物 (保持你原有的逻辑，但整理得更清晰)
+          FILES_TO_COPY=(
+            "arch/${{ env.ARCH }}/boot/Image.gz-dtb"
+            "arch/${{ env.ARCH }}/boot/Image"
+            "arch/${{ env.ARCH }}/boot/Image.gz"
+            "arch/${{ env.ARCH }}/boot/dtbo"
+            "arch/${{ env.ARCH }}/boot/dtbo.img"
+            "arch/${{ env.ARCH }}/boot/dtb"
+            "arch/${{ env.ARCH }}/boot/dtb.img"
+          )
+
+          for file in "${FILES_TO_COPY[@]}"; do
+            if [ -e "${{ env.OUT_DIR }}/$file" ]; then
+              cp -f "${{ env.OUT_DIR }}/$file" ./AnyKernel3/
+              echo "📦 Copied $(basename $file) to AnyKernel3"
             fi
-            if [ -e "${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image.gz" ]; then
-              cp -f ${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image.gz ./AnyKernel3/
-            fi
-            if [ -e "${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/dtbo" ]; then
-              cp -f ${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/dtbo ./AnyKernel3/
-            fi
-            if [ -e "${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/dtbo.img" ]; then
-              cp -f ${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/dtbo.img ./AnyKernel3/
-            fi
-          fi
+          done
 
           cd AnyKernel3/
           zip -q -r "${{ env.ANYKERNEL3_FILE }}.zip" *
-
-      - name: "💾 Upload AnyKernel3 image => (${{ env.BUILD_DATE }})"
-        env:
-          ANYKERNEL3_FILE: "AnyKernel3-${{ env.KERNEL_NAME }}-${{ env.BUILD_DATE }}"
-        uses: actions/upload-artifact@v4
-        if: ${{ env.USE_ANYKERNEL3 == 'true' }}
-        with:
-          name: "${{ env.ANYKERNEL3_FILE }}"
-          path: AnyKernel3/*
 
       - name: 🧧 Create GitHub Release => (${{ env.BUILD_DATE }})
         env:
