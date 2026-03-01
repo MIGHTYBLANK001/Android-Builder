@@ -39,11 +39,7 @@
     },
     "AnyKernel3": {
       "use": true,
-      "release": true,
-      "custom": {
-        "repo": "",
-        "branch": ""
-      }
+      "release": true
     },
     "enableKernelSU": false,
     "enableLXC": true
