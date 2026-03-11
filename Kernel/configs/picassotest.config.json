@@ -3,7 +3,7 @@
     "kernelSource": {
       "name": "picasso",
       "repo": "https://github.com/Akitlove/kernel_xiaomi_sm7250-caf",
-      "branch": "16",
+      "branch": "kernel.lnx.4.19.r37-rel",
       "device": "picasso",
       "defconfig": "vendor/picasso_user_defconfig"
     },
