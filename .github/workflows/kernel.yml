@@ -261,7 +261,34 @@ jobs:
 
           echo "🏁 [FINISH] 所有 3 个补丁及配置已全部就绪！"
 
+      - name: 🔍 Docker Config Validation
+        working-directory: ${{ env.KERNEL_NAME }}
+        run: |
+          echo "==== 🧬 准备生成 .config 进行校验 ===="
+          # 1. 生成初始 .config 文件 (基于你的设备 defconfig)
+          make O=out ARCH=arm64 ${{ matrix.CONFIG.kernelSource.defconfig }}
 
+          echo "==== 📥 下载 Docker 官方校验脚本 ===="
+          curl -sSL https://raw.githubusercontent.com/moby/moby/master/contrib/check-config.sh > check-config.sh
+          chmod +x check-config.sh
+
+          echo "==== 📊 执行内核配置审计 (Audit) ===="
+          # 指向生成的 .config 文件执行检测
+          # 我们使用 '|| true' 是为了防止脚本因为某些非致命错误 (如缺失存储驱动) 导致工作流中断
+          ./check-config.sh out/.config || true
+
+          echo "==== 📋 审计关键项二次确认 ===="
+          # 检查几个 Docker 必须的硬性指标
+          MISSING_CRITICAL=$(./check-config.sh out/.config | grep -E "missing|required" | grep -v "optional" || true)
+          
+          if [ -n "$MISSING_CRITICAL" ]; then
+            echo "⚠️ 发现缺失的关键 Docker 配置项:"
+            echo "$MISSING_CRITICAL"
+            echo "------------------------------------"
+            echo "💡 建议: 请检查你的 LXC_defconfig.txt 或 Kconfig 注入是否完整。"
+          else
+            echo "✅ 所有核心 Docker 配置项均已就绪！"
+          fi
           
       - name: 👍 Start building the kernel
         working-directory: ${{ env.KERNEL_NAME }}
