@@ -296,10 +296,6 @@ jobs:
 
           echo "🏁 [FINISH] 通用 LXC 适配流程执行完毕。"
 
-
-
-          
-
       - name: 🔍 Docker Config Validation
         working-directory: ${{ env.KERNEL_NAME }}
         run: |
@@ -401,38 +397,42 @@ jobs:
 
       - name: ⏰ Pack Anykernel3
         if: ${{ env.USE_ANYKERNEL3 == 'true' }}
+        env:
+          PARAMS: "${{ toJSON(matrix.CONFIG.AnyKernel3) }}"
+          ANYKERNEL3_FILE: "${{ env.WORKSPACE }}/AnyKernel3-${{ env.KERNEL_NAME }}-${{ env.BUILD_DATE }}"
         run: |
-          # 1. 克隆 AnyKernel3 (优先使用自定义库)
-          if echo '${{ env.PARAMS }}' | jq -e '.custom' >/dev/null; then
-            git clone --depth=1 $(echo '${{ env.PARAMS }}' | jq -r '.custom.repo') -b $(echo '${{ env.PARAMS }}' | jq -r '.custom.branch') AnyKernel3
+          # 1. 克隆仓库 (增加判空保护，防止 git clone 失败)
+          CUSTOM_REPO=$(echo '${{ env.PARAMS }}' | jq -r '.custom.repo // empty')
+          CUSTOM_BRANCH=$(echo '${{ env.PARAMS }}' | jq -r '.custom.branch // "master"')
+
+          if [ -n "$CUSTOM_REPO" ]; then
+            git clone --depth=1 -b "$CUSTOM_BRANCH" "$CUSTOM_REPO" AnyKernel3
           else
             git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
           fi
 
-          # 2. 极简配置：批量修改 anykernel.sh
-          # 使用通用的 auto 策略，适应绝大多数 A/B 和非 A/B 设备
-          sed -i -E 's/(do.devicecheck|do.modules)=1/\1=0/g' AnyKernel3/anykernel.sh
-          sed -i -E 's/(block|is_slot_device|patch_vbmeta_flag)=.*/\1=auto;/g' AnyKernel3/anykernel.sh
-          
-          # 3. 动态注入 DTBO 逻辑 (如果脚本中没有则追加)
+          # 2. 极简配置修改 (合并正则，提升通用性)
+          # 自动处理：关闭检查、设置 block, slot, vbmeta 为 auto
+          sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
+          sed -i -E 's/^(block|is_slot_device|patch_vbmeta_flag)=.*/\1=auto;/g' AnyKernel3/anykernel.sh
+
+          # 3. 极简 DTBO 注入
           if ! grep -q "flash_dtbo" AnyKernel3/anykernel.sh; then
-            # 确保 dtbo_block 变量存在
             sed -i '/block=auto;/a dtbo_block=auto;' AnyKernel3/anykernel.sh
-            # 在 write_boot 之后执行 dtbo 刷写
             sed -i '/write_boot;/a \
             \n# dtbo\nif [ -f "dtbo.img" ]; then flash_dtbo; fi' AnyKernel3/anykernel.sh
           fi
 
-          # 4. 极简拷贝：寻找内核镜像和 DTBO
-          # 自动寻找 Image, Image.gz, Image.gz-dtb 等并放入根目录
+          # 4. 极简产物拷贝 (使用 find 自动适配多种命名)
+          # 拷贝 Image* (如 Image, Image.gz, Image.gz-dtb)
           find ${{ env.OUT_DIR }}/arch/arm64/boot -maxdepth 1 -name "Image*" -exec cp -f {} AnyKernel3/ \;
-          # 自动寻找并重命名 dtbo
+          # 拷贝并统一命名 dtbo.img
           find ${{ env.OUT_DIR }}/arch/arm64/boot -maxdepth 1 -name "dtbo*" -exec cp -f {} AnyKernel3/dtbo.img \;
-          
-          # 打包
-          cd AnyKernel3/
-          zip -q -r "${{ env.ANYKERNEL3_FILE }}.zip" *
-          echo "🎁 AnyKernel3 package created at ${{ env.ANYKERNEL3_FILE }}.zip"
+
+          # 5. 打包
+          cd AnyKernel3
+          zip -q -r "${{ env.ANYKERNEL3_FILE }}.zip" .
+          echo "🎁 Package created: ${{ env.ANYKERNEL3_FILE }}.zip"
 
       - name: 🧧 Create GitHub Release => (${{ env.BUILD_DATE }})
         env:
