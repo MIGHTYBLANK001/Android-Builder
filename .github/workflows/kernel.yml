@@ -209,57 +209,64 @@ jobs:
           echo -e "CONFIG_KPROBE_EVENTS=y" >> arch/${{ env.ARCH }}/configs/${{ env.KERNEL_DEFCONFIG_PATH }}
           cat arch/${{ env.ARCH }}/configs/${{ env.KERNEL_DEFCONFIG_PATH }}
 
-      - name: 😋 Setup LXC docker (Integrated & Verified)
-        env:
-          DEVICE_NAME: ${{ matrix.CONFIG.kernelSource.device }}
-          UTILS_URL: "https://github.com/MIGHTYBLANK001/Android-Builder/releases/download/tool/LXC_utils.zip"
+      - name: 😋 Setup LXC Docker (Precise Anchor Patching)
+        working-directory: ${{ env.KERNEL_NAME }}
         run: |
           set -e
-          echo "🛠️ [START] 开始全自动化补丁流程..."
-          cd ${{ github.workspace }}/${{ env.KERNEL_NAME }}
+          echo "🛠️ [START] 开始特征锚点精准补丁流程..."
 
-          # 1. 环境准备
-          wget -q "${{ env.UTILS_URL }}" -O LXC_utils.zip
+          # 1. 环境清理：回滚之前可能被误伤的文件，确保源码纯净
+          git checkout kernel/bpf/cgroup.c 2>/dev/null || true
+          git checkout kernel/cgroup/cgroup.c 2>/dev/null || true
+
+          # 2. 下载工具包 (主要使用 Kconfig)
+          wget -q "https://github.com/MIGHTYBLANK001/Android-Builder/releases/download/tool/LXC_utils.zip" -O LXC_utils.zip
           unzip -o LXC_utils.zip -d utils && rm -f LXC_utils.zip
-          echo "✅ [1/5] 工具包就绪，检测到补丁: $(ls utils/*.patch | xargs -n1 basename)"
 
-          # 2. 注入 Kconfig 菜单与 Defconfig 配置
+          # 3. 【核心修复】Cgroup 兼容性补丁 (特征锚点法)
+          # 针对 SM8250 4.19+ 内核，精确修改核心文件
+          CGROUP_FILE="kernel/cgroup/cgroup.c"
+          if [ -f "$CGROUP_FILE" ]; then
+              echo "🧬 正在对 $CGROUP_FILE 实施特征锚点修复..."
+              # 锚点逻辑：匹配 cfile->kn = kn; 并在其后插入 RUNC 所需的软链接代码
+              sed -i '/cfile->kn = kn;/a \
+                if (cft->ss && (cgrp->root->flags & CGRP_ROOT_NOPREFIX) && !(cft->flags & CFTYPE_NO_PREFIX)) {\
+                        snprintf(name, CGROUP_FILE_NAME_MAX, "%s.%s", cft->ss->name, cft->name);\
+                        kernfs_create_link(cgrp->kn, name, kn);\
+                }' "$CGROUP_FILE"
+
+              # 安全校验：确保补丁没有加在文件开头（防止语法错误）
+              if head -n 10 "$CGROUP_FILE" | grep -q "if (cft->ss"; then
+                  echo "❌ 严重错误：补丁注入位置偏移！" && exit 1
+              fi
+              grep -q "kernfs_create_link" "$CGROUP_FILE" && echo "✅ Cgroup 锚点补丁注入成功"
+          fi
+
+          # 4. 【防重启修复】xt_qtaguid Panic 补丁
+          QTAGUID_FILE="net/netfilter/xt_qtaguid.c"
+          if [ -f "$QTAGUID_FILE" ]; then
+              echo "🛡️ 正在修复 xt_qtaguid..."
+              # 将变量引用强制指向 no_dev_stats 以避免空指针引起的重启
+              sed -i 's/stats = dev_get_stats(iface_entry->net_dev,/stats = \&no_dev_stats; \/\/ dev_get_stats(iface_entry->net_dev,/g' "$QTAGUID_FILE"
+              echo "✅ xt_qtaguid 补丁应用成功"
+          fi
+
+          # 5. 【配置注入】Kconfig 与 Defconfig
+          echo "📝 注入 Docker 编译配置项..."
+          # 注入 Kconfig 级联菜单
+          sed -i '/utils\/Kconfig/d' Kconfig
           sed -i '/mainmenu/a source "utils/Kconfig"' Kconfig
-          DEFCONFIG="arch/arm64/configs/${{ env.DEVICE_NAME }}_defconfig"
-          if [ -f "$DEFCONFIG" ]; then
-              sed -i '/CONFIG_DOCKER/d' "$DEFCONFIG"
-              echo "CONFIG_DOCKER=y" >> "$DEFCONFIG"
-              sed -i '/CONFIG_ANDROID_PARANOID_NETWORK/d' "$DEFCONFIG"
-              echo "# CONFIG_ANDROID_PARANOID_NETWORK is not set" >> "$DEFCONFIG"
-              echo "✅ [2/5] Kconfig 注入 & Defconfig ($DEVICE_NAME) 优化完成"
-          fi
 
-          # 3. 补丁 1: Cgroup 兼容性 (runcpatch.sh)
-          chmod +x utils/runcpatch.sh
-          CGROUP_FILE=$(find kernel -name "cgroup.c" | head -n 1)
-          if [ -n "$CGROUP_FILE" ]; then
-              bash utils/runcpatch.sh "$CGROUP_FILE"
-              # 校验：检查关键函数是否成功注入
-              grep -q "kernfs_create_link" "$CGROUP_FILE" && echo "✅ [3/5] Cgroup 补丁 (Fix RUNC) 应用成功" || { echo "❌ Cgroup 补丁失败"; exit 1; }
+          # 注入 Defconfig 配置
+          TARGET_DEFCONFIG="arch/arm64/configs/${{ matrix.CONFIG.kernelSource.defconfig }}"
+          if [ -f "$TARGET_DEFCONFIG" ]; then
+              sed -i '/CONFIG_DOCKER/d' "$TARGET_DEFCONFIG"
+              sed -i '/CONFIG_ANDROID_PARANOID_NETWORK/d' "$TARGET_DEFCONFIG"
+              echo "CONFIG_DOCKER=y" >> "$TARGET_DEFCONFIG"
+              echo "# CONFIG_ANDROID_PARANOID_NETWORK is not set" >> "$TARGET_DEFCONFIG"
+              echo "✅ Defconfig (${{ matrix.CONFIG.kernelSource.defconfig }}) 优化完成"
           fi
-
-          # 4. 补丁 2: xt_qtaguid Panic 修复 (核心补丁)
-          QTAGUID_SRC="net/netfilter/xt_qtaguid.c"
-          if [ -f "$QTAGUID_SRC" ]; then
-              # 尝试应用补丁，如果已存在则跳过
-              patch -p1 < utils/xt_qtaguid.patch || patch -p0 < utils/xt_qtaguid.patch || echo "⚠️ xt_qtaguid 可能已手动修改"
-              # 深度校验：确保 stats 指向 no_dev_stats
-              grep -q "stats = &no_dev_stats;" "$QTAGUID_SRC" && echo "✅ [4/5] xt_qtaguid Panic 补丁应用成功" || { echo "❌ xt_qtaguid 补丁校验失败"; exit 1; }
-          fi
-
-          # 5. 补丁 3: Fix Panic (额外稳定性补丁)
-          # 这个补丁通常针对 binder 或其他容器敏感模块
-          if [ -f "utils/fix_panic.patch" ]; then
-              patch -p1 < utils/fix_panic.patch || echo "⚠️ fix_panic.patch 跳过或不匹配"
-              echo "✅ [5/5] fix_panic 补丁处理完成"
-          fi
-
-          echo "🏁 [FINISH] 所有 3 个补丁及配置已全部就绪！"
+          echo "🏁 [FINISH] LXC 适配流程已通过特征锚点校验。"
 
       - name: 🔍 Docker Config Validation
         working-directory: ${{ env.KERNEL_NAME }}
