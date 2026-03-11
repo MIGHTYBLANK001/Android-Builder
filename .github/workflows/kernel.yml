@@ -209,46 +209,59 @@ jobs:
           echo -e "CONFIG_KPROBE_EVENTS=y" >> arch/${{ env.ARCH }}/configs/${{ env.KERNEL_DEFCONFIG_PATH }}
           cat arch/${{ env.ARCH }}/configs/${{ env.KERNEL_DEFCONFIG_PATH }}
 
-      - name: 😋 Setup LXC docker
-        working-directory: ${{ env.KERNEL_NAME }}
+      - name: 😋 Setup LXC docker (Integrated)
         env:
-          DEFCONFIG: ${{ env.WORKSPACE }}/${{ env.KERNEL_NAME }}/arch/${{ steps.generate-args.outputs.ARCH }}/configs/${{env.KERNEL_DEFCONFIG_PATH}}
-          ADD_DEFCONFIG: ${{ env.WORKSPACE }}/Kernel/LXC/LXC_defconfig
-        if: ${{ env.ENABLE_LXC == 'true' }}
+          # 从矩阵中获取设备名（如 lmi）
+          DEVICE_NAME: ${{ matrix.CONFIG.kernelSource.device }}
+          # 你的工具包链接
+          UTILS_URL: "https://github.com/MIGHTYBLANK001/Android-Builder/releases/download/tool/LXC_utils.zip"
         run: |
-          for config in $(cat ${{ env.ADD_DEFCONFIG }})
-          do
-            echo $config >> ${{ env.DEFCONFIG }}
-          done
-          if [ -f kernel/cgroup.c ]; then
-            row=$(sed -n -e '/^static int cgroup_add_file/=' kernel/cgroup.c)
-            touch /tmp/tmp.txt
-            sed -n -e '/static int cgroup_add_file/,/return 0/p' kernel/cgroup.c >> /tmp/tmp.txt
-            row2=$(sed -n -e '/return 0/=' /tmp/tmp.txt)
-            row3=$(echo `expr $row + $row2 - 1`)
-            sed -i "$row3 i\        }" kernel/cgroup.c
-            sed -i "$row3 i\                kernfs_create_link(cgrp->kn, name, kn);" kernel/cgroup.c
-            sed -i "$row3 i\                snprintf(name, CGROUP_FILE_NAME_MAX, \"%s.%s\", cft->ss->name, cft->name);" kernel/cgroup.c
-            sed -i "$row3 i\        if (cft->ss && (cgrp->root->flags & CGRP_ROOT_NOPREFIX) && !(cft->flags & CFTYPE_NO_PREFIX)) {" kernel/cgroup.c
-            echo "🎖️ Modify kernel/cgroup.c"
-          fi
-          if [ -f kernel/cgroup/cgroup.c ]; then
-            row=$(sed -n -e '/^static int cgroup_add_file/=' kernel/cgroup/cgroup.c)
-            touch /tmp/tmp.txt
-            sed -n -e '/static int cgroup_add_file/,/return 0/p' kernel/cgroup/cgroup.c >> /tmp/tmp.txt
-            row2=$(sed -n -e '/return 0/=' /tmp/tmp.txt)
-            row3=$(echo `expr $row + $row2 - 1`)
-            sed -i "$row3 i\        }" kernel/cgroup/cgroup.c
-            sed -i "$row3 i\                kernfs_create_link(cgrp->kn, name, kn);" kernel/cgroup/cgroup.c
-            sed -i "$row3 i\                snprintf(name, CGROUP_FILE_NAME_MAX, \"%s.%s\", cft->ss->name, cft->name);" kernel/cgroup/cgroup.c
-            sed -i "$row3 i\        if (cft->ss && (cgrp->root->flags & CGRP_ROOT_NOPREFIX) && !(cft->flags & CFTYPE_NO_PREFIX)) {" kernel/cgroup/cgroup.c
-            echo "🎖️ Modify kernel/cgroup/cgroup.c"
-          fi
-          if [ -f android-kernel/net/netfilter/xt_qtaguid.c ]; then
-            git am -s < ${{ env.WORKSPACE }}/LXC/Patches/xt_qtaguid.patch
-            echo "🎖️ Apply xt_qtaguid.patch"
+          echo "🛠️ 正在开始 LXC/Docker 适配自动化流程..."
+          cd ${{ github.workspace }}/${{ env.KERNEL_NAME }}
+
+          # 1. 下载并解压 LXC 工具包 (包含 Kconfig 和 Patch)
+          wget -q "${{ env.UTILS_URL }}" -O LXC_utils.zip
+          rm -rf utils && unzip -o LXC_utils.zip -d utils
+          rm -f LXC_utils.zip
+
+          # 2. 注入 Kconfig 菜单
+          # 这样你可以在 make menuconfig 中看到 Utilities 选项
+          if ! grep -q 'source "utils/Kconfig"' Kconfig; then
+              echo 'source "utils/Kconfig"' >> Kconfig
+              echo "✅ 已向根 Kconfig 注入 utils 菜单"
           fi
 
+          # 3. 自动化配置 Defconfig
+          DEFCONFIG="arch/arm64/configs/${{ env.DEVICE_NAME }}_defconfig"
+          if [ -f "$DEFCONFIG" ]; then
+              echo "📝 正在优化 $DEFCONFIG ..."
+              # 启用 Docker 核心开关
+              sed -i '/CONFIG_DOCKER/d' "$DEFCONFIG"
+              echo "CONFIG_DOCKER=y" >> "$DEFCONFIG"
+              # 禁用 Android 网络限制 (关键：修复容器无法联网)
+              sed -i '/CONFIG_ANDROID_PARANOID_NETWORK/d' "$DEFCONFIG"
+              echo "# CONFIG_ANDROID_PARANOID_NETWORK is not set" >> "$DEFCONFIG"
+          fi
+
+          # 4. 执行 Cgroup 核心修复 (解决 runc/docker 启动报错)
+          # 自动匹配内核路径 (4.19+ 在 kernel/cgroup/，老内核在 kernel/)
+          chmod +x utils/runcpatch.sh
+          CGROUP_FILE=""
+          [ -f "kernel/cgroup/cgroup.c" ] && CGROUP_FILE="kernel/cgroup/cgroup.c"
+          [ -f "kernel/cgroup.c" ] && CGROUP_FILE="kernel/cgroup.c"
+          
+          if [ -n "$CGROUP_FILE" ]; then
+              echo "🧬 正在对 $CGROUP_FILE 执行 RUNC 补丁..."
+              bash utils/runcpatch.sh "$CGROUP_FILE"
+          fi
+
+          # 5. 修复 xt_qtaguid 导致的内核 Panic (横屏死机)
+          if [ -f "net/netfilter/xt_qtaguid.c" ]; then
+              echo "🛡️ 正在应用 xt_qtaguid 稳定性补丁..."
+              patch -p1 < utils/xt_qtaguid.patch || patch -p0 < utils/xt_qtaguid.patch
+          fi
+
+          echo "✅ LXC/Docker 环境集成完成！"
       - name: 👍 Start building the kernel
         working-directory: ${{ env.KERNEL_NAME }}
         env:
