@@ -2,8 +2,8 @@
   {
     "kernelSource": {
       "name": "picasso",
-      "repo": "https://github.com/MIGHTYBLANK001/picasso-android_kernel_xiaomi_sm7250",
-      "branch": "13.0",
+      "repo": "https://github.com/Akitlove/kernel_xiaomi_sm7250-caf",
+      "branch": "16",
       "device": "picasso",
       "defconfig": "vendor/picasso_user_defconfig"
     },
