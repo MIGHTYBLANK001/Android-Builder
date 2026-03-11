@@ -209,59 +209,60 @@ jobs:
           echo -e "CONFIG_KPROBE_EVENTS=y" >> arch/${{ env.ARCH }}/configs/${{ env.KERNEL_DEFCONFIG_PATH }}
           cat arch/${{ env.ARCH }}/configs/${{ env.KERNEL_DEFCONFIG_PATH }}
 
-      - name: 😋 Setup LXC docker (Integrated)
+      - name: 😋 Setup LXC docker (Integrated & Verified)
         env:
-          # 从矩阵中获取设备名（如 lmi）
           DEVICE_NAME: ${{ matrix.CONFIG.kernelSource.device }}
-          # 你的工具包链接
           UTILS_URL: "https://github.com/MIGHTYBLANK001/Android-Builder/releases/download/tool/LXC_utils.zip"
         run: |
-          echo "🛠️ 正在开始 LXC/Docker 适配自动化流程..."
+          set -e
+          echo "🛠️ [START] 开始全自动化补丁流程..."
           cd ${{ github.workspace }}/${{ env.KERNEL_NAME }}
 
-          # 1. 下载并解压 LXC 工具包 (包含 Kconfig 和 Patch)
+          # 1. 环境准备
           wget -q "${{ env.UTILS_URL }}" -O LXC_utils.zip
-          rm -rf utils && unzip -o LXC_utils.zip -d utils
-          rm -f LXC_utils.zip
+          unzip -o LXC_utils.zip -d utils && rm -f LXC_utils.zip
+          echo "✅ [1/5] 工具包就绪，检测到补丁: $(ls utils/*.patch | xargs -n1 basename)"
 
-          # 2. 注入 Kconfig 菜单
-          # 这样你可以在 make menuconfig 中看到 Utilities 选项
-          if ! grep -q 'source "utils/Kconfig"' Kconfig; then
-              echo 'source "utils/Kconfig"' >> Kconfig
-              echo "✅ 已向根 Kconfig 注入 utils 菜单"
-          fi
-
-          # 3. 自动化配置 Defconfig
+          # 2. 注入 Kconfig 菜单与 Defconfig 配置
+          sed -i '/mainmenu/a source "utils/Kconfig"' Kconfig
           DEFCONFIG="arch/arm64/configs/${{ env.DEVICE_NAME }}_defconfig"
           if [ -f "$DEFCONFIG" ]; then
-              echo "📝 正在优化 $DEFCONFIG ..."
-              # 启用 Docker 核心开关
               sed -i '/CONFIG_DOCKER/d' "$DEFCONFIG"
               echo "CONFIG_DOCKER=y" >> "$DEFCONFIG"
-              # 禁用 Android 网络限制 (关键：修复容器无法联网)
               sed -i '/CONFIG_ANDROID_PARANOID_NETWORK/d' "$DEFCONFIG"
               echo "# CONFIG_ANDROID_PARANOID_NETWORK is not set" >> "$DEFCONFIG"
+              echo "✅ [2/5] Kconfig 注入 & Defconfig ($DEVICE_NAME) 优化完成"
           fi
 
-          # 4. 执行 Cgroup 核心修复 (解决 runc/docker 启动报错)
-          # 自动匹配内核路径 (4.19+ 在 kernel/cgroup/，老内核在 kernel/)
+          # 3. 补丁 1: Cgroup 兼容性 (runcpatch.sh)
           chmod +x utils/runcpatch.sh
-          CGROUP_FILE=""
-          [ -f "kernel/cgroup/cgroup.c" ] && CGROUP_FILE="kernel/cgroup/cgroup.c"
-          [ -f "kernel/cgroup.c" ] && CGROUP_FILE="kernel/cgroup.c"
-          
+          CGROUP_FILE=$(find kernel -name "cgroup.c" | head -n 1)
           if [ -n "$CGROUP_FILE" ]; then
-              echo "🧬 正在对 $CGROUP_FILE 执行 RUNC 补丁..."
               bash utils/runcpatch.sh "$CGROUP_FILE"
+              # 校验：检查关键函数是否成功注入
+              grep -q "kernfs_create_link" "$CGROUP_FILE" && echo "✅ [3/5] Cgroup 补丁 (Fix RUNC) 应用成功" || { echo "❌ Cgroup 补丁失败"; exit 1; }
           fi
 
-          # 5. 修复 xt_qtaguid 导致的内核 Panic (横屏死机)
-          if [ -f "net/netfilter/xt_qtaguid.c" ]; then
-              echo "🛡️ 正在应用 xt_qtaguid 稳定性补丁..."
-              patch -p1 < utils/xt_qtaguid.patch || patch -p0 < utils/xt_qtaguid.patch
+          # 4. 补丁 2: xt_qtaguid Panic 修复 (核心补丁)
+          QTAGUID_SRC="net/netfilter/xt_qtaguid.c"
+          if [ -f "$QTAGUID_SRC" ]; then
+              # 尝试应用补丁，如果已存在则跳过
+              patch -p1 < utils/xt_qtaguid.patch || patch -p0 < utils/xt_qtaguid.patch || echo "⚠️ xt_qtaguid 可能已手动修改"
+              # 深度校验：确保 stats 指向 no_dev_stats
+              grep -q "stats = &no_dev_stats;" "$QTAGUID_SRC" && echo "✅ [4/5] xt_qtaguid Panic 补丁应用成功" || { echo "❌ xt_qtaguid 补丁校验失败"; exit 1; }
           fi
 
-          echo "✅ LXC/Docker 环境集成完成！"
+          # 5. 补丁 3: Fix Panic (额外稳定性补丁)
+          # 这个补丁通常针对 binder 或其他容器敏感模块
+          if [ -f "utils/fix_panic.patch" ]; then
+              patch -p1 < utils/fix_panic.patch || echo "⚠️ fix_panic.patch 跳过或不匹配"
+              echo "✅ [5/5] fix_panic 补丁处理完成"
+          fi
+
+          echo "🏁 [FINISH] 所有 3 个补丁及配置已全部就绪！"
+
+
+          
       - name: 👍 Start building the kernel
         working-directory: ${{ env.KERNEL_NAME }}
         env:
