@@ -401,60 +401,34 @@ jobs:
 
       - name: ⏰ Pack Anykernel3
         if: ${{ env.USE_ANYKERNEL3 == 'true' }}
-        env:
-          PARAMS: "${{ toJSON(matrix.CONFIG.AnyKernel3) }}"
-          ARCH: ${{ steps.generate-args.outputs.ARCH }}
-          ANYKERNEL3_FILE: "${{ env.WORKSPACE }}/AnyKernel3-${{ env.KERNEL_NAME }}-${{ env.BUILD_DATE }}"
         run: |
-          if echo -n '${{ env.PARAMS }}' | jq -e 'has("custom")' > /dev/null; then
-            CUSTOM_ANYKERNEL3=$(echo -n '${{ env.PARAMS }}' | jq -r ".custom")
-            ANYKERNEL_REPO=$(echo $CUSTOM_ANYKERNEL3 | jq -r ".repo")
-            ANYKERNEL_BRANCH=$(echo $CUSTOM_ANYKERNEL3 | jq -r ".branch")
-            git clone --recursive --depth=1 -j $(nproc) --branch $ANYKERNEL_BRANCH $ANYKERNEL_REPO AnyKernel3
-            echo "🤔 Use custom AnyKernel3 => ($ANYKERNEL_REPO)"
+          # 1. 克隆 AnyKernel3 (优先使用自定义库)
+          if echo '${{ env.PARAMS }}' | jq -e '.custom' >/dev/null; then
+            git clone --depth=1 $(echo '${{ env.PARAMS }}' | jq -r '.custom.repo') -b $(echo '${{ env.PARAMS }}' | jq -r '.custom.branch') AnyKernel3
           else
-            git clone --recursive --depth=1 -j $(nproc) https://github.com/osm0sis/AnyKernel3 AnyKernel3
-            
-            # --- AnyKernel3 脚本自动化配置 ---
-            # 1. 关闭设备型号检查
-            sed -i 's/^do.devicecheck=.*/do.devicecheck=0;/g' AnyKernel3/anykernel.sh
-            # 2. 自动识别 Boot 分区路径
-            sed -i 's/^[Bb][Ll][Oo][Cc][Kk]=.*/block=auto;/g' AnyKernel3/anykernel.sh
-            # 3. 自动识别 A/B 分区
-            sed -i 's/^[Ii][Ss]_[Ss][Ll][Oo][Tt]_[Dd][Ee][Vv][Ii][Cc][Ee]=.*/is_slot_device=auto;/g' AnyKernel3/anykernel.sh
-            # 4. 设置补丁校验位 (VBMETA)
-            sed -i 's/^patch_vbmeta_flag=.*/patch_vbmeta_flag=auto;/g' AnyKernel3/anykernel.sh
-            
-            # --- 🚀 新增：DTBO 自动化配置 ---
-            # 5. 开启 DTBO 分区自动识别
-            if grep -q "dtbo_block=" AnyKernel3/anykernel.sh; then
-              sed -i 's/^dtbo_block=.*/dtbo_block=auto;/g' AnyKernel3/anykernel.sh
-            else
-              # 如果变量不存在，在 block=auto 下方插入
-              sed -i '/block=auto;/a dtbo_block=auto;' AnyKernel3/anykernel.sh
-            fi
-
-            # 6. 在 write_boot 后注入 flash_dtbo 指令
-            if ! grep -q "flash_dtbo" AnyKernel3/anykernel.sh; then
-              sed -i '/write_boot;/a \\n## dtbo install\nif [ -f "dtbo.img" ]; then\n  ui_print "  • Flashing dtbo.img...";\n  flash_dtbo;\nfi' AnyKernel3/anykernel.sh
-            fi
-            
-            echo "✅ AnyKernel3 configuration patched with DTBO support."
+            git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
           fi
 
-          # --- 📦 拷贝编译产物 ---
-          # 拷贝内核 (Image / Image.gz-dtb 等)
-          find ${{ env.OUT_DIR }}/arch/arm64/boot -maxdepth 1 -name "Image*" -exec cp -f {} AnyKernel3/ \;
+          # 2. 极简配置：批量修改 anykernel.sh
+          # 使用通用的 auto 策略，适应绝大多数 A/B 和非 A/B 设备
+          sed -i -E 's/(do.devicecheck|do.modules)=1/\1=0/g' AnyKernel3/anykernel.sh
+          sed -i -E 's/(block|is_slot_device|patch_vbmeta_flag)=.*/\1=auto;/g' AnyKernel3/anykernel.sh
           
-          # 拷贝 DTBO (核心动作)
-          if [ -f "${{ env.OUT_DIR }}/arch/arm64/boot/dtbo.img" ]; then
-            cp -f ${{ env.OUT_DIR }}/arch/arm64/boot/dtbo.img AnyKernel3/dtbo.img
-            echo "📦 Copied dtbo.img to AnyKernel3"
-          elif [ -f "${{ env.OUT_DIR }}/arch/arm64/boot/dtbo" ]; then
-            cp -f ${{ env.OUT_DIR }}/arch/arm64/boot/dtbo AnyKernel3/dtbo.img
-            echo "📦 Copied dtbo (renamed to dtbo.img) to AnyKernel3"
+          # 3. 动态注入 DTBO 逻辑 (如果脚本中没有则追加)
+          if ! grep -q "flash_dtbo" AnyKernel3/anykernel.sh; then
+            # 确保 dtbo_block 变量存在
+            sed -i '/block=auto;/a dtbo_block=auto;' AnyKernel3/anykernel.sh
+            # 在 write_boot 之后执行 dtbo 刷写
+            sed -i '/write_boot;/a \
+            \n# dtbo\nif [ -f "dtbo.img" ]; then flash_dtbo; fi' AnyKernel3/anykernel.sh
           fi
 
+          # 4. 极简拷贝：寻找内核镜像和 DTBO
+          # 自动寻找 Image, Image.gz, Image.gz-dtb 等并放入根目录
+          find ${{ env.OUT_DIR }}/arch/arm64/boot -maxdepth 1 -name "Image*" -exec cp -f {} AnyKernel3/ \;
+          # 自动寻找并重命名 dtbo
+          find ${{ env.OUT_DIR }}/arch/arm64/boot -maxdepth 1 -name "dtbo*" -exec cp -f {} AnyKernel3/dtbo.img \;
+          
           # 打包
           cd AnyKernel3/
           zip -q -r "${{ env.ANYKERNEL3_FILE }}.zip" *
